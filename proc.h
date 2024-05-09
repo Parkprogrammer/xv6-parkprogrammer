@@ -55,7 +55,8 @@ struct proc {
   uint vruntime;               // Virtual runtime calculated in XV6
   uint ptick;                  // Process tick
   uint timeslice;              // (tick) * weight_of_current_p / total_weight
-
+  struct mmap_area mmaps[64];  // Array of mmap regions
+  int total_mmaps;             // Total memory mappings (must be less than 64)
 
 };
 
@@ -64,3 +65,13 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
+
+struct mmap_area {
+  struct file *f;
+  uint addr;
+  int length;
+  int offset;
+  int prot;
+  int flags;
+  struct proc *p // the process with this mmap_area
+};

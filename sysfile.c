@@ -442,3 +442,83 @@ sys_pipe(void)
   fd[1] = fd1;
   return 0;
 }
+
+int
+sys_mmap(void)
+{
+  uint addr;
+  int length, prot, flags, fd=-1, offset=0; // 주어지지 않는경우에 대한 처리
+  struct file *f;
+
+  if(argint(0, &addr) < 0 || argint(1, &length) < 0 || argint(2, &prot) < 0 ||
+     argint(3, &flags) < 0 )
+  {
+    return 0; // If arguments are not enough fail return 0
+  }
+
+  // anonymous mapping이 아닌경우
+  // if(argint(4, &fd)>=0 && fd!=-1){
+  //   argfd(4, &fd, &f);
+  // }
+
+  int val = argfd(4, &fd, &f);
+  
+  // offset이 안주어진 경우 0으로 설정
+  if(argint(5, &offset)<0){
+    offset=0;
+  }
+  
+  
+
+  // protections
+  // #define PROT_READ     0X1
+  // #define PROT_WRITE    0X2
+  // flags
+  // #define MAP_ANONYMOUS 0X1
+  // #define MAP_POPULATE  0X2
+
+  // fd==-1 -> anonymous mapping
+  if (val<0){
+    if(flags & MAP_POPULATE)
+      return 0; // flags is MAP_POPULATE / if flags 0 this if pass!
+
+    if(argint(4, &fd)<0){
+    fd=-1;
+  }
+
+    // if(argint(4, &offset)==-1 && offset==0) // Just in case (For debugging)
+      // return (int)mmap(addr, length, prot, flags, -1, 0);
+  } else {
+    // find the file discripator with error handling
+    filedup(f);
+
+  }
+
+  
+  return (int)mmap(addr,length,prot,flags,fd,offset);  // It should also return 0 in the actual function
+
+}
+
+int
+sys_munmap(void)
+{
+  uint addr;
+
+  if(argint(0, &addr)<0)
+    return -1;
+
+  return munmap(addr); // It should also reutnr -1 in the actual function
+
+}
+
+int
+sys_freemem(void)
+{
+  // uint addr;
+  // if(argint(0, &addr)<0)
+  //   return -1;
+
+  freemem();
+  return 0;
+
+}

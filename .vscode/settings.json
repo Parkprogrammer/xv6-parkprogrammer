@@ -4,6 +4,7 @@
         "x86.h": "c",
         "proc.h": "c",
         "stat.h": "c",
-        "user.h": "c"
+        "user.h": "c",
+        "memory": "c"
     }
 }
