@@ -481,11 +481,14 @@ sys_mmap(void)
   if (val<0){
     if(flags & MAP_POPULATE)
       return 0; // flags is MAP_POPULATE / if flags 0 this if pass!
-
+    
     if(argint(4, &fd)<0){
-    fd=-1;
-  }
+      fd=-1;
+    }
 
+    if(fd<-1){
+      return 0;
+    }
     // if(argint(4, &offset)==-1 && offset==0) // Just in case (For debugging)
       // return (int)mmap(addr, length, prot, flags, -1, 0);
   } else {
@@ -496,7 +499,7 @@ sys_mmap(void)
 
   
   return (int)mmap(addr,length,prot,flags,fd,offset);  // It should also return 0 in the actual function
-
+                                                       // If failed.
 }
 
 int

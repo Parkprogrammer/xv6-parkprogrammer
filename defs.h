@@ -126,6 +126,7 @@ void            ps(int);
 int             calculatesum(void*);
 int             findrunnable(void*);
 int             getweight(int);
+struct file*    fdlookup(int fd); // Added fdlookup function in proc
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -191,6 +192,12 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+
+// sysmap.c
+uint mmap(uint, int, int, int, int, int);
+int munmap(uint);
+void freemem(void);
+
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

@@ -790,3 +790,19 @@ int getweight(int nice){
   return weights[nice];
 }
 
+// fdlookup function struct proc *p = myproc();
+struct file* fdlookup(int fd) {
+    struct proc *p = myproc();
+
+    // 일단은 file discriptor가 -1인 경우도 에러 핸들링에 넘어가도록 설정
+    // 최대한 넘어가지 않도록 설정을 해주는게 맞음
+    
+    if (fd < -1 || fd >= NOFILE)
+        panic("Invalid file discriptor");
+
+    struct file *f = p->ofile[fd];
+    if (f < 0)
+      panic("Invalid file discriptor");
+
+    return f;
+}
