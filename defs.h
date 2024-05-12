@@ -203,6 +203,7 @@ int munmap(uint);
 int mmap_file(uint, int, struct proc *, int, int);
 int mmap_anon(uint, int, struct proc *, int, int);
 int map_page_anon(uint, struct proc *, int);
+int copy_maps(struct proc *, struct proc *);
 
 
 // number of elements in fixed-size array

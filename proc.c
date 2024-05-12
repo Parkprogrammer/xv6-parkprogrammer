@@ -284,6 +284,12 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
+  if(copy_maps(curproc, np) < 0) {
+		kfree(np->kstack);
+		np->kstack = 0;
+		np->state = UNUSED;
+		return -1;
+	}
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;

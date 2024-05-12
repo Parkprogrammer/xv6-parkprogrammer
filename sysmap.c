@@ -47,8 +47,8 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 
         p->mmaps[midx].addr = addr;  
         p->mmaps[midx].flags = flags;
-        // p->mmaps[midx].prot = PTE_U | prot;
-        p->mmaps[midx].prot = prot;
+        p->mmaps[midx].prot = PTE_U | prot;
+        // p->mmaps[midx].prot = prot;
         p->mmaps[midx].p = p;      // 프로세스를 할당을 다시 해준다고?
         p->total_mmaps += 1;
         return p->mmaps[midx].addr;
@@ -90,8 +90,8 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     // 매핑 정보 저장
     p->mmaps[midx].addr  = addr;
     p->mmaps[midx].flags = flags;
-    //p->mmaps[midx].prot = PTE_U | prot;
-    p->mmaps[midx].prot = prot;
+    p->mmaps[midx].prot = PTE_U | prot;
+    // p->mmaps[midx].prot = prot;
     p->mmaps[midx].offset = offset;
     p->mmaps[midx].f = f;
     p->mmaps[midx].p = p;      // 프로세스를 할당을 다시 해준다고?
@@ -154,8 +154,8 @@ int mmap_file(uint addr, int length, struct proc *p, int prot,int flags){
             char *paddr = kalloc();  // 물리 메모리 페이지 할당
             if (!paddr)
                 return -1;  // 물리 페이지 할당 실패 처리
-            // if (mappages(p->pgdir, (void*)current_addr, PGSIZE, V2P(paddr), PTE_U | prot) != 0){
-                if (mappages(p->pgdir, (void*)current_addr, PGSIZE, V2P(paddr), prot) != 0){
+            if (mappages(p->pgdir, (void*)current_addr, PGSIZE, V2P(paddr), PTE_U | prot) != 0){
+                // if (mappages(p->pgdir, (void*)current_addr, PGSIZE, V2P(paddr), prot) != 0){
                 // mappages failed
                 deallocuvm(p->pgdir, paddr - PGSIZE, paddr);
                 kfree(paddr);
@@ -213,5 +213,89 @@ int map_page_anon(uint mmapaddr, struct proc *p, int prot){
   
     return 0;
 
+}
+
+void copy_mmap_struct(struct mmap_area *dest, struct mmap_area *src) {
+  dest->addr = src->addr;
+  dest->length = src->length;
+  dest->flags = src->flags;
+  dest->prot = src->prot;
+  dest->f = src->f;
+  dest->offset = src->offset;
+  dest->p = src->p;         // 이거 이렇게 해도 되는거임??
+}
+
+int copy_maps(struct proc *parent, struct proc *child) {
+    pte_t *pte;
+    int i = 0;
+    while (i < parent->total_mmaps) {
+        uint addr = parent->mmaps[i].addr;
+        int protection = parent->mmaps[i].prot;
+        int flags = parent->mmaps[i].flags;
+        uint length = parent->mmaps[i].length;
+        uint start = addr;
+        for (; start < addr + length; start += PGSIZE) {
+            pte = walkpgdir(parent->pgdir, (char *)start, 0);
+            uint pa = pte ? PTE_ADDR(*pte) : 0;
+            if (pa == 0) {
+                if (!(parent->mmaps[i].flags & MAP_ANONYMOUS)) {
+                    // File mapping
+                    uint current_addr = PGROUNDDOWN(start);
+                    char *paddr = kalloc();
+                    if (!paddr) {
+                        return -1;
+                    }
+                    memset(paddr, 0, PGSIZE);
+                    if (readi(parent->mmaps[i].f, paddr, PGSIZE, parent->mmaps[i].offset + (start - addr)) < 0) {
+                        kfree(paddr);
+                        return -1;
+                    }
+                    int prot = parent->mmaps[i].prot;
+                    if (prot & PROT_WRITE) {
+                        prot |= PTE_W;
+                    }
+                    if (mappages(child->pgdir, (void *)current_addr, PGSIZE, V2P(paddr), prot) != 0) {
+                        deallocuvm(child->pgdir, paddr - PGSIZE, paddr);
+                        kfree(paddr);
+                        cprintf("CopyMaps: mappages failed\n");
+                        return -1;
+                    }
+                } else if (parent->mmaps[i].flags & MAP_POPULATE) {
+                    // Anonymous mapping with MAP_POPULATE
+                    uint current_addr = PGROUNDDOWN(start);
+                    char *paddr = kalloc();
+                    if (!paddr) {
+                        return -1;
+                    }
+                    memset(paddr, 0, PGSIZE);
+                    int prot = parent->mmaps[i].prot;
+                    if (prot & PROT_WRITE) {
+                        prot |= PTE_W;
+                    }
+                    if (mappages(child->pgdir, (void *)current_addr, PGSIZE, V2P(paddr), prot) != 0) {
+                        deallocuvm(child->pgdir, paddr - PGSIZE, paddr);
+                        kfree(paddr);
+                        cprintf("CopyMaps: mappages failed\n");
+                        return -1;
+                    }
+                } else {
+                    // Anonymous mapping without MAP_POPULATE
+                    if (map_page_anon(child, start, protection) < 0) {
+                        return -1;
+                    }
+                }
+            } else {
+                char *parentmem = (char *)P2V(pa);
+                if (mappages(child->pgdir, (void *)start, PGSIZE, V2P(parentmem), protection) < 0) {
+                    cprintf("CopyMaps: mappages failed\n");
+                    return -1;
+                }
+            }
+        }
+        copy_mmap_struct(&child->mmaps[i], &parent->mmaps[i]);
+        i += 1;
+    }
+    child->total_mmaps = parent->total_mmaps;
+    return 0;
 }
 
