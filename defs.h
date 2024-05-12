@@ -192,11 +192,16 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+int             mappages(pde_t *, void *, uint, uint, int);
+pte_t *         walkpgdir(pde_t *, const void *, int);  // added these two functions
 
 // sysmap.c
 uint mmap(uint, int, int, int, int, int);
 int munmap(uint);
 void freemem(void);
+int mmap_file(uint, int, struct proc *, int, int);
+int mmap_anon(uint, int, struct proc *, int, int);
+int map_page_anon(uint, struct proc *, int);
 
 
 // number of elements in fixed-size array

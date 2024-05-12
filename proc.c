@@ -175,6 +175,7 @@ found:
   p->runtime = 0;           // Initializing runtime
   p->vruntime = 0;          // Initializing virtual runtime
   // p->ptick = 0;          // Initializing virtual runtime
+  p->total_mmaps = 0;       // Initializing total_maps (?deadlock)
 
   release(&ptable.lock);
 

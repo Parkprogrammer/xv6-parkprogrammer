@@ -479,8 +479,8 @@ sys_mmap(void)
 
   // fd==-1 -> anonymous mapping
   if (val<0){
-    if(flags & MAP_POPULATE)
-      return 0; // flags is MAP_POPULATE / if flags 0 this if pass!
+    if(!(flags & MAP_POPULATE) || !(flags & MAP_POPULATE|MAP_ANONYMOUS))
+      return 0;
     
     if(argint(4, &fd)<0){
       fd=-1;
