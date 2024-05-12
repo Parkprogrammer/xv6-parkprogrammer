@@ -47,7 +47,8 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 
         p->mmaps[midx].addr = addr;  
         p->mmaps[midx].flags = flags;
-        p->mmaps[midx].prot = PTE_U | prot;
+        // p->mmaps[midx].prot = PTE_U | prot;
+        p->mmaps[midx].prot = prot;
         p->mmaps[midx].p = p;      // 프로세스를 할당을 다시 해준다고?
         p->total_mmaps += 1;
         return p->mmaps[midx].addr;
@@ -89,7 +90,8 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     // 매핑 정보 저장
     p->mmaps[midx].addr  = addr;
     p->mmaps[midx].flags = flags;
-    p->mmaps[midx].prot = PTE_U | prot;
+    //p->mmaps[midx].prot = PTE_U | prot;
+    p->mmaps[midx].prot = prot;
     p->mmaps[midx].offset = offset;
     p->mmaps[midx].f = f;
     p->mmaps[midx].p = p;      // 프로세스를 할당을 다시 해준다고?
@@ -104,16 +106,39 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 
 // return success(1) | fail(-1)
 int munmap(uint addr){
+    struct proc *p = myproc();
+    int i;
 
+    // 탐색하여 해당 시작 주소를 갖는 mmap_area 찾기
+    for (i = 0; i < p->total_mmaps; i++) {
+        if (p->mmaps[i].addr == addr) {
+            struct mmap_area *area = &p->mmaps[i];
+
+            // 각 페이지에 대해 처리
+            for (uint current_addr = area->addr; current_addr < area->addr + area->length; current_addr += PGSIZE) {
+                pte_t *pte = walkpgdir(p->pgdir, (void *)current_addr, 0);
+                if (pte && (*pte & PTE_P)) {
+                    // 페이지가 할당된 경우, 물리 페이지 해제
+                    char *phys_page = P2V(PTE_ADDR(*pte));
+                    memset(phys_page, 1, PGSIZE);  // 페이지를 1로 채우기
+                    kfree(phys_page);  // 페이지를 자유 리스트에 반환
+                    *pte = 0;  // 페이지 테이블 엔트리 초기화
+                }
+            }
+
+            // mmap_area 구조체 제거
+            for (int j = i; j < p->total_mmaps - 1; j++) {
+                p->mmaps[j] = p->mmaps[j + 1];
+            }
+            p->total_mmaps--;  // 매핑된 영역 수 감소
+
+            return 1;  // 성공적으로 해제
+        }
+    }
+
+    return -1;  // 해당 주소로 시작하는 mmap_area 없음
 
 }
-
-
-void freemem(){
-
-
-}
-
 
 // The main function for file-mapping flags for POP O/X
 int mmap_file(uint addr, int length, struct proc *p, int prot,int flags){
@@ -129,7 +154,8 @@ int mmap_file(uint addr, int length, struct proc *p, int prot,int flags){
             char *paddr = kalloc();  // 물리 메모리 페이지 할당
             if (!paddr)
                 return -1;  // 물리 페이지 할당 실패 처리
-            if (mappages(p->pgdir, (void*)current_addr, PGSIZE, V2P(paddr), PTE_U | prot) != 0){
+            // if (mappages(p->pgdir, (void*)current_addr, PGSIZE, V2P(paddr), PTE_U | prot) != 0){
+                if (mappages(p->pgdir, (void*)current_addr, PGSIZE, V2P(paddr), prot) != 0){
                 // mappages failed
                 deallocuvm(p->pgdir, paddr - PGSIZE, paddr);
                 kfree(paddr);
@@ -188,3 +214,4 @@ int map_page_anon(uint mmapaddr, struct proc *p, int prot){
     return 0;
 
 }
+

@@ -68,6 +68,7 @@ char*           kalloc(void);
 void            kfree(char*);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
+int             freemem(void);
 
 // kbd.c
 void            kbdintr(void);
@@ -172,6 +173,7 @@ extern uint     ticks;
 void            tvinit(void);
 extern struct spinlock tickslock;
 
+
 // uart.c
 void            uartinit(void);
 void            uartintr(void);
@@ -198,7 +200,6 @@ pte_t *         walkpgdir(pde_t *, const void *, int);  // added these two funct
 // sysmap.c
 uint mmap(uint, int, int, int, int, int);
 int munmap(uint);
-void freemem(void);
 int mmap_file(uint, int, struct proc *, int, int);
 int mmap_anon(uint, int, struct proc *, int, int);
 int map_page_anon(uint, struct proc *, int);

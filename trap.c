@@ -85,7 +85,9 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
-
+  case T_PGFLT:
+    // 추가로 범위 지정해줘야해?
+    
   //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
@@ -138,4 +140,59 @@ trap(struct trapframe *tf)
   // Check if the process has been killed since we yielded
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)
     exit();
+}
+
+void page_fault_handler(struct trapframe *tf) {
+    struct proc *p = myproc();
+    uint addr = rcr2();
+    int write_fault = tf->err & 2;
+
+    for (int i = 0; i < p->total_mmaps; i++) {
+        uint start = p->mmaps[i].addr;
+        uint end = start + (uint)p->mmaps[i].length;
+        if (addr >= start && addr <= end) {
+            pde_t *pte;
+            uint pa = walkpgdir(p->pgdir, (char *)PGROUNDDOWN(addr), 1);
+            if (!pa) {
+                cprintf("Segmentation Fault: %p\n", rcr2());
+                myproc()->killed = 1;
+                return;
+            }
+
+            if (write_fault && !(p->mmaps[i].prot & PROT_WRITE)) {
+                cprintf("Protection Fault: %p\n", rcr2());
+                myproc()->killed = 1;
+                return;
+            }
+
+            uint current_addr = PGROUNDDOWN(addr);
+            char *paddr = kalloc();
+            if (!paddr) {
+                myproc()->killed = 1;
+                return;
+            }
+            memset(paddr, 0, PGSIZE);
+
+            if (!(p->mmaps[i].flags & MAP_ANONYMOUS) || !(p->mmaps[i].flags & MAP_ANONYMOUS|MAP_POPULATE)) {
+                // File mapping
+                if (readi(p->mmaps[i].f, paddr, PGSIZE, p->mmaps[i].offset + (addr - start)) < 0) {
+                    myproc()->killed = 1;
+                    kfree(paddr);
+                    return;
+                }
+            }
+
+            int prot = p->mmaps[i].prot;
+            if (prot & PROT_WRITE) {
+                prot |= PTE_W;
+            }
+
+            if (mappages(p->pgdir, (void *)current_addr, PGSIZE, V2P(paddr), prot) != 0) {
+                deallocuvm(p->pgdir, paddr - PGSIZE, paddr);
+                kfree(paddr);
+                myproc()->killed = 1;
+                return;
+            }
+        }
+    }
 }
