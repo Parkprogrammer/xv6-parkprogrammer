@@ -129,7 +129,7 @@ sys_ps(void)
   return 0;
 }
 
-int sys_freemem(void) 
-{
-    return freemem();
-}
+// int sys_freemem(void) 
+// {
+//     return freemem();
+// }

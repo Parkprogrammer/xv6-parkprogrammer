@@ -12,6 +12,7 @@
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
+int numfreepages=0;
 
 struct run {
   struct run *next;
@@ -21,7 +22,7 @@ struct {
   struct spinlock lock;
   int use_lock;
   struct run *freelist;
-  int free_count;
+  int len;
 } kmem;
 
 // Initialization happens in two phases.
@@ -35,7 +36,7 @@ kinit1(void *vstart, void *vend)
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
   freerange(vstart, vend);
-  kmem.free_count = 0;
+  kmem.len = 0;
 }
 
 void
@@ -71,10 +72,11 @@ kfree(char *v)
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
+  numfreepages++;
   r = (struct run*)v;
   r->next = kmem.freelist;
   kmem.freelist = r;
-  kmem.free_count++;
+  kmem.len++;
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -90,19 +92,46 @@ kalloc(void)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r){
+  if(r)
     kmem.freelist = r->next;
-    kmem.free_count--;
-  }
+  kmem.len--; 
+  numfreepages++;
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
 }
 
+int len(struct run * head) 
+{
+	struct run * cur;
+	int ret;
+	ret = 0;
+	cur = head;
+  	for (;cur;cur=cur->next)
+		ret++;
+	return ret;
+}
+
 int freemem(void)
 {
-    acquire(&kmem.lock);
-    int count = kmem.free_count;
-    release(&kmem.lock);
-    return count;
+    
+    //int count;
+    // int ret;
+    // // acquire(&kmem.lock);
+    // // // count = kmem.free_count;
+    // // ret = len((struct run*)kmem.freelist);
+    // // // cprintf("\n\n------%d------\n\n",ret);
+    // // release(&kmem.lock);
+    // if (kmem.use_lock){
+    //   acquire(&kmem.lock);
+    // }
+    // cprintf("\nHELLO!\n");
+    // ret = len((struct run*)kmem.freelist);
+    // cprintf("freemem: %d free pages\n", ret);
+    // if (kmem.use_lock)
+    //   release(&kmem.lock);
+
+    
+    return numfreepages;
 }
+

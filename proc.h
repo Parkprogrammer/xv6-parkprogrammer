@@ -34,6 +34,17 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct mmap_area {
+  struct file *f;
+  uint addr;
+  int length;
+  int offset;
+  int prot;
+  int flags;
+  struct proc *p; // the process with this mmap_area
+};
+
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -66,12 +77,3 @@ struct proc {
 //   fixed-size stack
 //   expandable heap
 
-struct mmap_area {
-  struct file *f;
-  uint addr;
-  int length;
-  int offset;
-  int prot;
-  int flags;
-  struct proc *p // the process with this mmap_area
-};

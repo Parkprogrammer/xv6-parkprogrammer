@@ -9,6 +9,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct trapframe;
 
 // bio.c
 void            binit(void);
@@ -171,6 +172,7 @@ void            timerinit(void);
 void            idtinit(void);
 extern uint     ticks;
 void            tvinit(void);
+void            page_fault_handler(struct trapframe *);
 extern struct spinlock tickslock;
 
 
@@ -200,7 +202,7 @@ pte_t *         walkpgdir(pde_t *, const void *, int);  // added these two funct
 // sysmap.c
 uint mmap(uint, int, int, int, int, int);
 int munmap(uint);
-int mmap_file(uint, int, struct proc *, int, int);
+int mmap_file(uint, int, struct proc *, int, int, struct file *, int);
 int mmap_anon(uint, int, struct proc *, int, int);
 int map_page_anon(uint, struct proc *, int);
 int copy_maps(struct proc *, struct proc *);

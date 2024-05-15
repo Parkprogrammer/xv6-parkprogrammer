@@ -454,24 +454,27 @@ readi(struct inode *ip, char *dst, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
-
+  
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].read)
       return -1;
     return devsw[ip->major].read(ip, dst, n);
   }
-
-  if(off > ip->size || off + n < off)
+  
+  if(off > ip->size || off + n < off){
+    // cprintf("\n%d %d %d %d\n",(int)off,(int)n,ip->size,(int)n);
     return -1;
+  }
+  // cprintf("\n%d %d %d %d\n",(int)off,(int)n,ip->size,(int)n);
   if(off + n > ip->size)
     n = ip->size - off;
-
   for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
     bp = bread(ip->dev, bmap(ip, off/BSIZE));
     m = min(n - tot, BSIZE - off%BSIZE);
     memmove(dst, bp->data + off%BSIZE, m);
     brelse(bp);
   }
+  
   return n;
 }
 

@@ -7,6 +7,9 @@
 #include "x86.h"
 #include "traps.h"
 #include "spinlock.h"
+#include "fs.h"
+#include "sleeplock.h" 
+#include "file.h"
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
@@ -87,6 +90,10 @@ trap(struct trapframe *tf)
     break;
   case T_PGFLT:
     // 추가로 범위 지정해줘야해?
+    //if (rcr2() >= MMAPBASE && rcr2() < KERNBASE) {
+    page_fault_handler(tf);
+    break;
+    //}
     
   //PAGEBREAK: 13
   default:
@@ -142,57 +149,172 @@ trap(struct trapframe *tf)
     exit();
 }
 
+// void page_fault_handler(struct trapframe *tf) {
+//     struct proc *p = myproc();
+//     uint addr = rcr2();
+//     int write_fault = tf->err & 2;
+
+//     for (int i = 0; i < p->total_mmaps; i++) {
+//         uint start = p->mmaps[i].addr;
+//         uint end = start + (uint)p->mmaps[i].length;
+
+//         if (addr >= start && addr <= end) {
+//             // Check if the fault address is within the mapped region
+//             pte_t *pte = walkpgdir(p->pgdir, (char *)PGROUNDDOWN(addr), 0);
+//             uint pa = pte ? PTE_ADDR(*pte) : 0;
+
+//             if (pa && (*pte & PTE_P)) {
+//                 // If the page is present but there's a write fault on a read-only page
+//                 if (write_fault && !(*pte & PTE_W)) {
+//                     cprintf("Protection Fault: %p\n", rcr2());
+//                     myproc()->killed = 1;
+//                     return;
+//                 }
+//                 // If the page is already present and writable, do nothing
+//                 return;
+//             }
+
+//             if (!pa || !(*pte & PTE_P)) {
+//                 // Allocate a new page if the page is not present
+//                 char *paddr = kalloc();
+//                 if (!paddr) {
+//                     myproc()->killed = 1;
+//                     return;
+//                 }
+//                 memset(paddr, 0, PGSIZE);
+
+//                 if (!(p->mmaps[i].flags & MAP_ANONYMOUS)) { // 이 조건도 나중에 바꿔줘야 함!
+//                     // File-backed mapping: read the content from the file
+//                     int bytes_read = fileread(p->mmaps[i].f, paddr, PGSIZE);
+//                     if (bytes_read < 0) {
+//                         myproc()->killed = 1;
+//                         kfree(paddr);
+//                         return;
+//                     }
+//                   //   cprintf("---%d---",p->mmaps[i].addr);
+//                   //   char *data = (char *)paddr;  // 매핑된 가상 주소
+//                   //   cprintf("trap Reading mapped data: ");
+//                   //   for (int i = 0; i < 50; i++) {
+//                   //     cprintf("%d", data[i]);  // 데이터 읽기
+//                   //   }
+//                   // cprintf("\n");
+//                 }
+
+//                 int prot = p->mmaps[i].prot;
+//                 if (prot & PROT_WRITE) {
+//                     prot |= PTE_W;
+//                 }
+
+//                 // Map the new page to the virtual address
+//                 if (mappages(p->pgdir, (void *)PGROUNDDOWN(addr), PGSIZE, V2P(paddr), prot) != 0) {
+//                     kfree(paddr);
+//                     myproc()->killed = 1;
+//                     return;
+//                 }
+//                 return;
+//             }
+//         }
+//     }
+
+//     // If no valid mapping found, kill the process
+//     cprintf("Segmentation Fault: %p\n", rcr2());
+//     myproc()->killed = 1;
+// }
+
 void page_fault_handler(struct trapframe *tf) {
     struct proc *p = myproc();
     uint addr = rcr2();
     int write_fault = tf->err & 2;
 
     for (int i = 0; i < p->total_mmaps; i++) {
+
+
         uint start = p->mmaps[i].addr;
         uint end = start + (uint)p->mmaps[i].length;
+
         if (addr >= start && addr <= end) {
-            pde_t *pte;
-            uint pa = walkpgdir(p->pgdir, (char *)PGROUNDDOWN(addr), 1);
-            if (!pa) {
-                cprintf("Segmentation Fault: %p\n", rcr2());
-                myproc()->killed = 1;
-                return;
-            }
+            // Check if the fault address is within the mapped region
+            pte_t *pte = walkpgdir(p->pgdir, (char *)PGROUNDDOWN(addr), 0);
+            uint pa = pte ? PTE_ADDR(*pte) : 0;
 
-            if (write_fault && !(p->mmaps[i].prot & PROT_WRITE)) {
-                cprintf("Protection Fault: %p\n", rcr2());
-                myproc()->killed = 1;
-                return;
-            }
+            if (pa && (*pte & PTE_P)) {
+                // If the page is present but there's a write fault on a read-only page
+                if (write_fault && !(*pte & PTE_W)) {
+                    // Copy-on-Write (COW) mechanism
+                    char *newmem = kalloc();
+                    if (!newmem) {
+                        myproc()->killed = 1;
+                        return;
+                    }
+                    memmove(newmem, (char *)P2V(pa), PGSIZE);
 
-            uint current_addr = PGROUNDDOWN(addr);
-            char *paddr = kalloc();
-            if (!paddr) {
-                myproc()->killed = 1;
-                return;
-            }
-            memset(paddr, 0, PGSIZE);
+                    // Update the page table entry to point to the new page
+                    *pte = V2P(newmem) | PTE_P | PTE_U | PTE_W;
+                    lcr3(V2P(p->pgdir));  // Refresh the TLB
 
-            if (!(p->mmaps[i].flags & MAP_ANONYMOUS) || !(p->mmaps[i].flags & MAP_ANONYMOUS|MAP_POPULATE)) {
-                // File mapping
-                if (readi(p->mmaps[i].f, paddr, PGSIZE, p->mmaps[i].offset + (addr - start)) < 0) {
-                    myproc()->killed = 1;
-                    kfree(paddr);
                     return;
                 }
+                // If the page is already present and writable, do nothing
+                return;
             }
 
-            int prot = p->mmaps[i].prot;
-            if (prot & PROT_WRITE) {
-                prot |= PTE_W;
-            }
+            if (!pa || !(*pte & PTE_P)) {
+                // Allocate a new page if the page is not present
+                char *paddr = kalloc();
+                if (!paddr) {
+                    myproc()->killed = 1;
+                    return;
+                }
+                memset(paddr, 0, PGSIZE);
 
-            if (mappages(p->pgdir, (void *)current_addr, PGSIZE, V2P(paddr), prot) != 0) {
-                deallocuvm(p->pgdir, paddr - PGSIZE, paddr);
-                kfree(paddr);
-                myproc()->killed = 1;
+                if (!(p->mmaps[i].flags & MAP_ANONYMOUS)) { // File-backed mapping: read the content from the file
+                    struct file *f = p->mmaps[i].f;
+                    uint file_size = f->ip->size;
+
+                    // 파일 크기 확인
+                    if (p->mmaps[i].offset > file_size) {
+                        cprintf("page_fault_handler: offset %d is beyond file size %d\n", p->mmaps[i].offset, file_size);
+                        kfree(paddr);
+                        myproc()->killed = 1;
+                        return;
+                    }
+
+                    // 길이 조정
+                    uint length = end - start;
+                    if (p->mmaps[i].offset + length > file_size) {
+                        length = file_size - p->mmaps[i].offset;
+                        cprintf("page_fault_handler: adjusted length to %d\n", length);
+                    }
+
+                    ilock(f->ip);
+                    int bytes_read = readi(f->ip, paddr, p->mmaps[i].offset + (addr - start), PGSIZE);
+                    iunlock(f->ip);
+
+                    if (bytes_read < 0) {
+                        myproc()->killed = 1;
+                        kfree(paddr);
+                        return;
+                    }
+                }
+
+                int prot = p->mmaps[i].prot;
+                if (prot & PROT_WRITE) {
+                    prot |= PTE_W;
+                }
+
+                // Map the new page to the virtual address
+                if (mappages(p->pgdir, (void *)PGROUNDDOWN(addr), PGSIZE, V2P(paddr), prot) != 0) {
+                    kfree(paddr);
+                    myproc()->killed = 1;
+                    return;
+                }
                 return;
             }
         }
     }
+
+    // If no valid mapping found, kill the process
+    cprintf("Segmentation Fault: %p\n", rcr2());
+    myproc()->killed = 1;
 }
+

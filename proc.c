@@ -284,12 +284,14 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
+  
   if(copy_maps(curproc, np) < 0) {
 		kfree(np->kstack);
 		np->kstack = 0;
 		np->state = UNUSED;
 		return -1;
 	}
+  
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -306,7 +308,7 @@ fork(void)
     if(curproc->ofile[i])
       np->ofile[i] = filedup(curproc->ofile[i]);
   np->cwd = idup(curproc->cwd);
-
+  
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;

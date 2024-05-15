@@ -5,6 +5,16 @@
         "proc.h": "c",
         "stat.h": "c",
         "user.h": "c",
-        "memory": "c"
+        "memory": "c",
+        "defs.h": "c",
+        "string_view": "c",
+        "__locale": "c",
+        "__string": "c",
+        "string": "c",
+        "bitset": "c",
+        "chrono": "c",
+        "algorithm": "c",
+        "__bit_reference": "c",
+        "unordered_map": "c"
     }
 }
